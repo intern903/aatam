@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Results &amp; Well-Being Scorer</title>
+<!-- Chart.js is the only script dependency; loaded from CDN. App still works offline (trend chart just won't render). -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --navy:#1F3864;
+    --band:#D9E2F3;
+    --band2:#EEF2FA;
+    --line:#C9D4EA;
+    --ink:#22262b;
+    --muted:#5b6472;
+    --good:#2e7d46;
+    --warn:#b5562c;
+    --bad:#b23b30;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:#f3f4f7;color:var(--ink);
+    font-family:Calibri,'Segoe UI',Candara,Optima,-apple-system,sans-serif;line-height:1.45}
+  .page{max-width:8.5in;margin:18px auto;background:#fff;padding:0.55in 0.6in 0.7in;
+    box-shadow:0 2px 18px rgba(31,56,100,.10);border-radius:6px}
+  h1{font-size:26px;color:var(--navy);margin:0 0 2px;font-weight:700;letter-spacing:.01em}
+  h2{font-size:17px;color:var(--navy);margin:26px 0 8px;font-weight:700;
+    border-bottom:2px solid var(--band);padding-bottom:4px}
+  h3{font-size:13px;color:var(--navy);margin:14px 0 6px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 4px}
+  .metatop{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:flex-end;margin:12px 0 4px}
+  .metatop label{font-size:11px;color:var(--muted);display:block;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}
+  .metatop input{font-family:inherit;font-size:14px;padding:4px 7px;border:1px solid var(--line);border-radius:5px;background:#fff}
+
+  table{border-collapse:collapse;width:100%;font-size:13.5px}
+  thead th{background:var(--navy);color:#fff;font-weight:600;text-align:left;padding:7px 8px;font-size:12px;letter-spacing:.02em}
+  tbody td{padding:5px 8px;border-bottom:1px solid #e7ebf3;vertical-align:middle}
+  tbody tr:nth-child(even){background:var(--band2)}
+  tbody tr.dragging{opacity:.35}
+  tbody tr.drop-target td{box-shadow:inset 0 2px 0 var(--navy)}
+  input,select{font-family:inherit}
+  td input[type=text]{width:100%;border:1px solid transparent;background:transparent;padding:4px 5px;border-radius:4px;font-size:13.5px}
+  td input[type=text]:focus{border-color:var(--line);background:#fff;outline:none}
+  td input[type=number]{width:52px;border:1px solid var(--line);border-radius:4px;padding:3px 4px;font-size:13px;text-align:center}
+  td select{border:1px solid var(--line);border-radius:4px;padding:3px 4px;font-size:13px;background:#fff}
+  .rank{font-weight:700;color:var(--navy);text-align:center;width:34px}
+  .drag{cursor:grab;color:#9aa6bd;text-align:center;width:22px;user-select:none;font-size:15px}
+  .drag:active{cursor:grabbing}
+  .del{cursor:pointer;color:#c2708a;text-align:center;width:26px;font-weight:700;border:none;background:none;font-size:15px}
+  .del:hover{color:var(--bad)}
+  .beingwrap{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+  .beingwrap .lab{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+  .doingwrap{display:flex;align-items:center;gap:6px}
+
+  .btn{font-family:inherit;font-size:13px;color:#fff;background:var(--navy);border:none;border-radius:6px;
+    padding:7px 13px;cursor:pointer;font-weight:600}
+  .btn:hover{background:#284a82}
+  .btn.ghost{background:#fff;color:var(--navy);border:1px solid var(--navy)}
+  .btn.ghost:hover{background:var(--band2)}
+  .btn.sm{padding:5px 10px;font-size:12px}
+  .btnrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px;align-items:center}
+
+  /* scorecard */
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:10px 0 6px}
+  .scorecard{border:1px solid var(--line);border-top:4px solid var(--navy);border-radius:8px;padding:12px 14px;background:#fff;text-align:center}
+  .scorecard .big{font-size:38px;font-weight:700;color:var(--navy);line-height:1}
+  .scorecard .lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:6px}
+  .scorecard .foot{font-size:11px;color:var(--muted);margin-top:4px;min-height:14px}
+
+  .gaps{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:8px 0}
+  .gapbox{border:1px solid var(--line);border-left:4px solid var(--navy);border-radius:7px;padding:10px 13px;background:var(--band2)}
+  .gapbox .gv{font-size:20px;font-weight:700;color:var(--navy)}
+  .gapbox .gl{font-size:12.5px;color:var(--ink);margin-top:2px}
+  .gapbox .gd{font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.4}
+
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;letter-spacing:.02em}
+  .pill.good{background:#e2f1e6;color:var(--good)}
+  .pill.warn{background:#f7ead9;color:var(--warn)}
+  .pill.bad{background:#f6e0dd;color:var(--bad)}
+  .pill.neu{background:var(--band);color:var(--navy)}
+
+  .audit td{font-size:12.5px}
+  .audit td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .audit tfoot td{font-weight:700;color:var(--navy);border-top:2px solid var(--navy);background:var(--band2)}
+  .miss{color:#9aa6bd}
+
+  .note{font-size:12px;color:var(--muted);margin:6px 0}
+  .quad{display:inline-block;font-size:14px;font-weight:700;color:var(--navy);background:var(--band);padding:5px 12px;border-radius:6px}
+
+  textarea{width:100%;font-family:inherit;font-size:13.5px;border:1px solid var(--line);border-radius:6px;padding:8px;min-height:70px;resize:vertical}
+  .keyrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+  .keyrow input{font-family:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:5px;min-width:280px}
+
+  .draftbox{border:2px solid var(--navy);border-radius:8px;padding:0;margin-top:12px;overflow:hidden}
+  .draftbox .dhead{background:var(--navy);color:#fff;padding:7px 12px;font-size:12px;font-weight:700;letter-spacing:.04em;
+    display:flex;justify-content:space-between;align-items:center}
+  .draftbox .dbody{padding:12px 14px;background:#fbfcfe}
+  .draftbox .field{margin-bottom:9px}
+  .draftbox .field .fl{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
+  .draftbox .field .fv{font-size:14px;color:var(--ink);margin-top:1px}
+  .draftbox .warnnote{font-size:11.5px;color:var(--warn);background:#fbf1e6;border-top:1px dashed #e6c9a8;padding:7px 12px}
+  .err{color:var(--bad);font-size:13px;background:#f9e7e5;border:1px solid #e9c4bf;border-radius:6px;padding:8px 11px;margin-top:8px}
+
+  .rollup td.num{text-align:center;font-variant-numeric:tabular-nums}
+  #chartWrap{border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:8px;background:#fff}
+  .hist{font-size:12px;color:var(--muted);margin-top:6px}
+
+  .foot-legal{margin-top:26px;padding-top:12px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);line-height:1.6}
+
+  @media print{
+    body{background:#fff}
+    .page{box-shadow:none;margin:0;max-width:100%;border-radius:0;padding:0.3in 0.35in}
+    .no-print{display:none !important}
+    .btn,.del,.drag{display:none !important}
+    h2{page-break-after:avoid}
+    table{page-break-inside:auto}
+    tr{page-break-inside:avoid}
+  }
+  @media (max-width:720px){
+    .cards{grid-template-columns:1fr}
+    .gaps{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Results &amp; Well-Being Scorer</h1>
+  <p class="sub">Priority-weighted scorecard for the Results Game and Well-Being Game. Rank&nbsp;1 = highest priority; higher-ranked results count for more.</p>
+
+  <div class="metatop no-screen-hide">
+    <div><label>Client</label><input id="mClient" type="text" value="Priya Sharma"></div>
+    <div><label>Game Period</label><input id="mPeriod" type="text" value="Fortnight 1"></div>
+    <div><label>Date</label><input id="mDate" type="text" value="2026-08-24"></div>
+  </div>
+
+  <!-- ================= RESULTS ENTRY ================= -->
+  <h2>1 · Results Game</h2>
+  <p class="note">Drag the ⠿ handle to reorder — weights recompute live. Toggle a row between <b>Doing</b> (done / not-done) and <b>Being</b> (start → target → achieved, each 1–10).</p>
+  <table id="resultsTable">
+    <thead>
+      <tr>
+        <th style="width:22px"></th>
+        <th style="width:34px">#</th>
+        <th>Intended Result</th>
+        <th style="width:150px">Life Area</th>
+        <th style="width:92px">Type</th>
+        <th style="width:230px">Completion</th>
+        <th style="width:26px"></th>
+      </tr>
+    </thead>
+    <tbody id="resultsBody"></tbody>
+  </table>
+  <div class="btnrow no-print">
+    <button class="btn sm" onclick="addResult()">+ Add result</button>
+    <span class="note" id="resCount"></span>
+  </div>
+
+  <!-- ================= WELL-BEING ENTRY ================= -->
+  <h2>2 · Well-Being Game</h2>
+  <p class="note">Chosen qualities scored 1–10. A previous score (optional) shows the per-quality delta.</p>
+  <table id="wbTable">
+    <thead>
+      <tr>
+        <th>Quality</th>
+        <th style="width:170px">Life Area</th>
+        <th style="width:90px">Score 1–10</th>
+        <th style="width:110px">Previous</th>
+        <th style="width:80px">Δ</th>
+        <th style="width:26px"></th>
+      </tr>
+    </thead>
+    <tbody id="wbBody"></tbody>
+  </table>
+  <div class="btnrow no-print">
+    <button class="btn sm" onclick="addQuality()">+ Add quality</button>
+  </div>
+
+  <!-- ================= SCORECARD ================= -->
+  <h2>3 · Scorecard</h2>
+  <div class="cards">
+    <div class="scorecard"><div class="big" id="scOverall">—</div><div class="lbl">Overall %</div><div class="foot">unweighted completion</div></div>
+    <div class="scorecard"><div class="big" id="scPrioritized">—</div><div class="lbl">Prioritized %</div><div class="foot">priority-weighted</div></div>
+    <div class="scorecard"><div class="big" id="scWellbeing">—</div><div class="lbl">Well-Being %</div><div class="foot" id="scWbFoot">mean quality</div></div>
+  </div>
+
+  <div class="gaps">
+    <div class="gapbox">
+      <div class="gv" id="gapPriority">—</div>
+      <div class="gl">Priority Gap <span id="gapPriorityPill"></span></div>
+      <div class="gd" id="gapPriorityDesc"></div>
+    </div>
+    <div class="gapbox">
+      <div class="gv" id="gapExec">—</div>
+      <div class="gl">Execution–Feeling Gap <span id="gapExecPill"></span></div>
+      <div class="gd" id="gapExecDesc"></div>
+    </div>
+  </div>
+
+  <p class="note" style="margin-top:10px">
+    <b>Top-third share:</b> <span id="topThird">—</span> &nbsp;·&nbsp;
+    <b>Lowest quality:</b> <span id="lowestQ">—</span> &nbsp;·&nbsp;
+    <b>Quadrant vs previous period:</b> <span class="quad" id="quadLabel">Baseline — no trend yet</span>
+  </p>
+
+  <h3>Weight audit — every row's contribution</h3>
+  <table class="audit">
+    <thead>
+      <tr>
+        <th style="width:34px">Rank</th>
+        <th>Intended Result</th>
+        <th style="width:70px">Type</th>
+        <th style="width:80px" class="num">Weight</th>
+        <th style="width:100px" class="num">Completion</th>
+        <th style="width:110px" class="num">Weight × c</th>
+      </tr>
+    </thead>
+    <tbody id="auditBody"></tbody>
+    <tfoot>
+      <tr>
+        <td colspan="3">Totals</td>
+        <td class="num" id="auditW">—</td>
+        <td class="num" id="auditSumC">—</td>
+        <td class="num" id="auditE">—</td>
+      </tr>
+    </tfoot>
+  </table>
+  <p class="note" id="auditFormula"></p>
+
+  <h3>Life-area rollup</h3>
+  <table class="rollup">
+    <thead>
+      <tr><th>Life Area</th><th class="num" style="width:170px">Mean completion</th><th class="num" style="width:170px">Mean quality (1–10)</th></tr>
+    </thead>
+    <tbody id="rollupBody"></tbody>
+  </table>
+
+  <!-- ================= TREND ================= -->
+  <h2>4 · Trend</h2>
+  <div class="btnrow no-print">
+    <button class="btn sm" onclick="savePeriod()">★ Save this period to history</button>
+    <button class="btn sm ghost" onclick="clearHistory()">Clear history</button>
+    <span class="hist" id="histCount"></span>
+  </div>
+  <div id="chartWrap"><canvas id="trendChart" height="150"></canvas></div>
+  <p class="note" id="chartNote"></p>
+
+  <!-- ================= DATA / PERSISTENCE ================= -->
+  <h2 class="no-print">Data</h2>
+  <div class="btnrow no-print">
+    <button class="btn" onclick="exportJSON()">⬇ Export JSON</button>
+    <button class="btn ghost" onclick="document.getElementById('importFile').click()">⬆ Import JSON</button>
+    <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importJSON(event)">
+    <button class="btn ghost" onclick="window.print()">🖶 Print / Save PDF</button>
+    <span class="note">History lives in the exported file. Nothing is stored in the browser.</span>
+  </div>
+
+  <!-- ================= GEMINI INSIGHT ================= -->
+  <h2 class="no-print">5 · Insight <span style="font-size:12px;font-weight:400;color:var(--muted)">(optional — for coach only)</span></h2>
+  <div class="no-print">
+    <div class="field" style="margin-bottom:6px">
+      <label class="fl" style="font-size:11px;color:var(--muted)">Debrief notes (sent to the model as context)</label>
+      <textarea id="notes" placeholder="What did the coach notice this period? Any context the numbers don't capture…"></textarea>
+    </div>
+    <div class="keyrow">
+      <input id="apiKey" type="password" placeholder="Paste Gemini API key (held in memory only, never exported)">
+      <button class="btn" id="genBtn" onclick="generateInsight()">Generate Insight</button>
+    </div>
+    <div id="insightOut"></div>
+  </div>
+
+  <p class="foot-legal">
+    All numbers on this page are computed locally in full precision and rounded for display only. The Insight panel is a draft interpretation for the coach and is <b>not</b> shown to the client; the language model receives only pre-computed metrics and never performs arithmetic. Built to run as a single file — Chart.js loads from a CDN for the trend chart; everything else works offline.
+  </p>
+</div>
+
+<script>
+"use strict";
+
+/* =========================================================================
+   PART 1 — THE MATH  (full precision; rounding happens only at display time)
+   ========================================================================= */
+
+function completion(r){
+  if(r.type === 'Doing'){
+    return r.status === 'Done' ? 1 : 0;
+  }
+  // Being
+  const s = Number(r.start), t = Number(r.target), a = Number(r.achieved);
+  if(t === s){ return clamp01(a / 10); }
+  return clamp01((a - s) / (t - s));
+}
+function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+
+function computeResults(results){
+  const N = results.length;
+  const W = N * (N + 1) / 2;                 // total available weight
+  const rows = results.map((r, i) => {
+    const rank = i + 1;
+    const weight = N - rank + 1;             // rank 1 -> N, rank N -> 1
+    const c = completion(r);
+    return { rank, weight, c, contribution: weight * c, result: r };
+  });
+  const E = rows.reduce((s, x) => s + x.contribution, 0);        // earned
+  const sumC = rows.reduce((s, x) => s + x.c, 0);
+  const prioritizedPct = W > 0 ? (E / W) * 100 : 0;
+  const overallPct     = N > 0 ? (sumC / N) * 100 : 0;
+  const priorityGap    = overallPct - prioritizedPct;
+
+  const topCount = N > 0 ? Math.ceil(N / 3) : 0;
+  const earnedTop = rows.filter(x => x.rank <= topCount).reduce((s, x) => s + x.contribution, 0);
+  const topThirdShare = E > 0 ? (earnedTop / E) * 100 : 0;
+
+  return { N, W, E, sumC, prioritizedPct, overallPct, priorityGap, topThirdShare, topCount, rows };
+}
+
+function computeWellbeing(qualities){
+  const scored = qualities.filter(q => q.score !== '' && q.score != null && !isNaN(Number(q.score)));
+  const scores = scored.map(q => Number(q.score));
+  const wellBeingPct = scores.length ? (mean(scores) / 10) * 100 : 0;
+  const perQualityDelta = scored.map(q => ({
+    name: q.name,
+    delta: (q.previousScore !== '' && q.previousScore != null && !isNaN(Number(q.previousScore)))
+      ? Number(q.score) - Number(q.previousScore) : null
+  }));
+  let lowestQuality = null;
+  if(scored.length){
+    lowestQuality = scored.reduce((lo, q) => Number(q.score) < Number(lo.score) ? q : lo, scored[0]);
+  }
+  return { wellBeingPct, perQualityDelta, lowestQuality, count: scored.length };
+}
+function mean(a){ return a.reduce((s, x) => s + x, 0) / a.length; }
+
+function computeCross(prioritizedPct, wellBeingPct, prev){
+  const executionFeelingGap = prioritizedPct - wellBeingPct;
+  let quadrant = 'Baseline — no trend yet';
+  if(prev && typeof prev.prioritizedPct === 'number' && typeof prev.wellBeingPct === 'number'){
+    const dR = prioritizedPct - prev.prioritizedPct;
+    const dW = wellBeingPct - prev.wellBeingPct;
+    if(dR >= 0 && dW >= 0)       quadrant = 'Integrated';
+    else if(dR >= 0 && dW < 0)   quadrant = 'Achieving without feeling it';
+    else if(dR < 0 && dW >= 0)   quadrant = 'Recalibrating';
+    else                         quadrant = 'Stalled';
+  }
+  return { executionFeelingGap, quadrant };
+}
+
+function lifeAreaRollup(results, qualities){
+  const areas = {};
+  const touch = a => { if(!areas[a]) areas[a] = { comps: [], quals: [] }; };
+  results.forEach(r => { const a = (r.lifeArea || '—').trim() || '—'; touch(a); areas[a].comps.push(completion(r)); });
+  qualities.forEach(q => {
+    if(q.score === '' || q.score == null || isNaN(Number(q.score))) return;
+    const a = (q.lifeArea || '—').trim() || '—'; touch(a); areas[a].quals.push(Number(q.score));
+  });
+  return Object.keys(areas).sort().map(a => ({
+    area: a,
+    meanCompletion: areas[a].comps.length ? mean(areas[a].comps) : null,   // null => show "—"
+    meanQuality:    areas[a].quals.length ? mean(areas[a].quals) : null
+  }));
+}
+
+/* rounding helpers — DISPLAY ONLY */
+function r2(x){ return Math.round(x * 100) / 100; }
+function pct1(x){ return x.toFixed(1) + '%'; }
+function signed2(x){ return (x >= 0 ? '+' : '') + x.toFixed(2); }
+
+/* =========================================================================
+   SELF-TEST  (runs on load; logs PASS/FAIL to console)
+   ========================================================================= */
+(function selfTest(){
+  const done = new Set([2,3,5,6,8]);
+  const test = [];
+  for(let rank=1; rank<=8; rank++){
+    test.push({ type:'Doing', status: done.has(rank) ? 'Done' : 'Not done', lifeArea:'Test', title:'r'+rank });
+  }
+  const m = computeResults(test);
+  const checks = [
+    ['E', m.E, 21],
+    ['W', m.W, 36],
+    ['prioritizedPct', r2(m.prioritizedPct), 58.33],
+    ['overallPct', r2(m.overallPct), 62.5],
+    ['priorityGap', r2(m.priorityGap), 4.17],
+  ];
+  let ok = true;
+  const detail = checks.map(([n,got,exp]) => { const p = got === exp; if(!p) ok = false; return `${n}=${got}${p?'✓':' (exp '+exp+')✗'}`; });
+  if(ok) console.log('%c[self-test] PASS','color:#2e7d46;font-weight:bold', detail.join('  '));
+  else   console.error('[self-test] FAIL', detail.join('  '));
+})();
+
+/* =========================================================================
+   STATE  (no localStorage / sessionStorage anywhere)
+   ========================================================================= */
+let uid = 1;
+const nid = () => 'id' + (uid++);
+
+const state = {
+  results: [],
+  qualities: [],
+  history: [],        // [{period,date,prioritizedPct,overallPct,wellBeingPct}]
+};
+let apiKeyMem = '';   // held in memory only
+
+/* Demo dataset (Priya Sharma) — preloaded so the app scores on first open */
+function loadDemo(){
+  state.results = [
+    { id:nid(), title:'Have 3 client conversations and send proposals', lifeArea:'Career', type:'Doing', status:'Done',     start:5, target:8, achieved:7 },
+    { id:nid(), title:'Publish 2 LinkedIn posts',                       lifeArea:'Career', type:'Doing', status:'Not done', start:5, target:8, achieved:7 },
+    { id:nid(), title:'Run 3 times this fortnight',                     lifeArea:'Health', type:'Doing', status:'Done',     start:5, target:8, achieved:7 },
+    { id:nid(), title:'Fully present with children after 6pm',          lifeArea:'Family', type:'Being', status:'Not done', start:5, target:8, achieved:7 },
+  ];
+  state.qualities = [
+    { id:nid(), name:'Confident',  lifeArea:'Career',               score:7, previousScore:'' },
+    { id:nid(), name:'Courageous', lifeArea:'Personal Development', score:6, previousScore:'' },
+    { id:nid(), name:'Resilient',  lifeArea:'Family',               score:5, previousScore:'' },
+  ];
+  state.history = [];
+}
+
+/* =========================================================================
+   RESULTS TABLE RENDER + INTERACTION
+   ========================================================================= */
+const resultsBody = document.getElementById('resultsBody');
+
+function renderResults(){
+  resultsBody.innerHTML = '';
+  state.results.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    tr.draggable = true;
+    tr.dataset.id = r.id;
+
+    const compCell = r.type === 'Doing'
+      ? `<div class="doingwrap">
+           <input type="checkbox" ${r.status==='Done'?'checked':''} onchange="setField('${r.id}','status', this.checked?'Done':'Not done')">
+           <span>${r.status==='Done'?'Done':'Not done'}</span>
+         </div>`
+      : `<div class="beingwrap">
+           <span class="lab">start</span><input type="number" min="1" max="10" value="${r.start}" onchange="setField('${r.id}','start',this.value)">
+           <span class="lab">target</span><input type="number" min="1" max="10" value="${r.target}" onchange="setField('${r.id}','target',this.value)">
+           <span class="lab">got</span><input type="number" min="1" max="10" value="${r.achieved}" onchange="setField('${r.id}','achieved',this.value)">
+         </div>`;
+
+    tr.innerHTML = `
+      <td class="drag" title="Drag to reorder">⠿</td>
+      <td class="rank">${i+1}</td>
+      <td><input type="text" value="${escapeAttr(r.title)}" oninput="setField('${r.id}','title',this.value)" placeholder="Intended result…"></td>
+      <td><input type="text" value="${escapeAttr(r.lifeArea)}" oninput="setField('${r.id}','lifeArea',this.value)" placeholder="Life area"></td>
+      <td>
+        <select onchange="setField('${r.id}','type',this.value)">
+          <option ${r.type==='Doing'?'selected':''}>Doing</option>
+          <option ${r.type==='Being'?'selected':''}>Being</option>
+        </select>
+      </td>
+      <td>${compCell}</td>
+      <td><button class="del" title="Remove" onclick="removeResult('${r.id}')">×</button></td>`;
+
+    wireDrag(tr);
+    resultsBody.appendChild(tr);
+  });
+  document.getElementById('resCount').textContent = state.results.length + ' result' + (state.results.length===1?'':'s') + ' · rank 1 = highest priority';
+}
+
+function setField(id, field, val){
+  const r = state.results.find(x => x.id === id) || state.qualities.find(x => x.id === id);
+  if(!r) return;
+  r[field] = val;
+  if(field === 'type'){ renderResults(); }   // switch completion editor
+  recompute();
+}
+function addResult(){
+  state.results.push({ id:nid(), title:'', lifeArea:'', type:'Doing', status:'Not done', start:5, target:8, achieved:5 });
+  renderResults(); recompute();
+}
+function removeResult(id){
+  state.results = state.results.filter(x => x.id !== id);
+  renderResults(); recompute();
+}
+
+/* drag to reorder */
+let dragId = null;
+function wireDrag(tr){
+  tr.addEventListener('dragstart', e => { dragId = tr.dataset.id; tr.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; });
+  tr.addEventListener('dragend',   () => { tr.classList.remove('dragging'); clearDropTargets(); });
+  tr.addEventListener('dragover',  e => { e.preventDefault(); clearDropTargets(); tr.classList.add('drop-target'); });
+  tr.addEventListener('drop',      e => {
+    e.preventDefault();
+    const targetId = tr.dataset.id;
+    if(dragId && targetId && dragId !== targetId){
+      const from = state.results.findIndex(x => x.id === dragId);
+      const to   = state.results.findIndex(x => x.id === targetId);
+      const [moved] = state.results.splice(from, 1);
+      state.results.splice(to, 0, moved);
+      renderResults(); recompute();     // weights recompute live
+    }
+    clearDropTargets();
+  });
+}
+function clearDropTargets(){ document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target')); }
+
+/* =========================================================================
+   WELL-BEING TABLE
+   ========================================================================= */
+const wbBody = document.getElementById('wbBody');
+function renderQualities(){
+  wbBody.innerHTML = '';
+  state.qualities.forEach(q => {
+    const delta = (q.previousScore!=='' && q.previousScore!=null && !isNaN(Number(q.previousScore)) && q.score!=='' && !isNaN(Number(q.score)))
+      ? Number(q.score) - Number(q.previousScore) : null;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="text" value="${escapeAttr(q.name)}" oninput="setField('${q.id}','name',this.value)" placeholder="Quality"></td>
+      <td><input type="text" value="${escapeAttr(q.lifeArea)}" oninput="setField('${q.id}','lifeArea',this.value)" placeholder="Life area"></td>
+      <td><input type="number" min="1" max="10" value="${q.score}" onchange="setField('${q.id}','score',this.value)" style="width:60px"></td>
+      <td><input type="number" min="1" max="10" value="${q.previousScore}" onchange="setField('${q.id}','previousScore',this.value)" placeholder="—" style="width:70px"></td>
+      <td>${delta===null?'<span class="miss">—</span>':(delta>0?'+':'')+delta}</td>
+      <td><button class="del" onclick="removeQuality('${q.id}')">×</button></td>`;
+    wbBody.appendChild(tr);
+  });
+}
+function addQuality(){
+  state.qualities.push({ id:nid(), name:'', lifeArea:'', score:5, previousScore:'' });
+  renderQualities(); recompute();
+}
+function removeQuality(id){
+  state.qualities = state.qualities.filter(x => x.id !== id);
+  renderQualities(); recompute();
+}
+
+/* =========================================================================
+   RECOMPUTE + SCORECARD RENDER
+   ========================================================================= */
+let lastMetrics = null;
+
+function recompute(){
+  const R  = computeResults(state.results);
+  const WB = computeWellbeing(state.qualities);
+  const prev = state.history.length ? state.history[state.history.length - 1] : null;
+  const X  = computeCross(R.prioritizedPct, WB.wellBeingPct, prev);
+  const roll = lifeAreaRollup(state.results, state.qualities);
+
+  // big numbers
+  document.getElementById('scOverall').textContent     = state.results.length ? pct1(R.overallPct) : '—';
+  document.getElementById('scPrioritized').textContent = state.results.length ? pct1(R.prioritizedPct) : '—';
+  document.getElementById('scWellbeing').textContent   = WB.count ? pct1(WB.wellBeingPct) : '—';
+  document.getElementById('scWbFoot').textContent      = WB.count ? ('mean of ' + WB.count + ' qualit' + (WB.count===1?'y':'ies')) : 'no qualities yet';
+
+  // priority gap
+  const pg = R.priorityGap;
+  document.getElementById('gapPriority').textContent = state.results.length ? signed2(pg) + ' pts' : '—';
+  const pgPill = document.getElementById('gapPriorityPill');
+  const pgDesc = document.getElementById('gapPriorityDesc');
+  if(!state.results.length){ pgPill.innerHTML=''; pgDesc.textContent=''; }
+  else if(pg > 0.5){ pgPill.className='pill warn'; pgPill.textContent='low-priority tilt';
+    pgDesc.textContent = 'Overall sits above prioritized — more of the completed work came from lower-ranked results.'; }
+  else if(pg < -0.5){ pgPill.className='pill good'; pgPill.textContent='top-priority focus';
+    pgDesc.textContent = 'Prioritized sits above overall — the results that mattered most are the ones getting done.'; }
+  else { pgPill.className='pill neu'; pgPill.textContent='balanced';
+    pgDesc.textContent = 'Completion is spread evenly across priority ranks.'; }
+
+  // execution-feeling gap
+  const eg = X.executionFeelingGap;
+  const egEl = document.getElementById('gapExec');
+  const egPill = document.getElementById('gapExecPill');
+  const egDesc = document.getElementById('gapExecDesc');
+  if(!state.results.length || !WB.count){ egEl.textContent='—'; egPill.innerHTML=''; egDesc.textContent='Needs both a Results score and a Well-Being score.'; }
+  else {
+    egEl.textContent = signed2(eg) + ' pts';
+    if(eg > 8){ egPill.className='pill warn'; egPill.textContent='doing > feeling';
+      egDesc.textContent = 'Execution is running ahead of well-being this period.'; }
+    else if(eg < -8){ egPill.className='pill neu'; egPill.textContent='feeling > doing';
+      egDesc.textContent = 'Well-being is running ahead of execution this period.'; }
+    else { egPill.className='pill good'; egPill.textContent='in step';
+      egDesc.textContent = 'Execution and well-being are moving together.'; }
+  }
+
+  // extras
+  document.getElementById('topThird').textContent = state.results.length
+    ? pct1(R.topThirdShare) + ' of the score came from the top ' + R.topCount + ' result' + (R.topCount===1?'':'s')
+    : '—';
+  document.getElementById('lowestQ').textContent = WB.lowestQuality
+    ? (WB.lowestQuality.name || '(unnamed)') + ' (' + WB.lowestQuality.score + ')'
+    : '—';
+  document.getElementById('quadLabel').textContent = X.quadrant;
+
+  // audit table
+  const ab = document.getElementById('auditBody');
+  ab.innerHTML = '';
+  R.rows.forEach(row => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${row.rank}</td>
+      <td>${escapeHTML(row.result.title) || '<span class="miss">(untitled)</span>'}</td>
+      <td>${row.result.type}</td>
+      <td class="num">${row.weight}</td>
+      <td class="num">${row.c.toFixed(3)}</td>
+      <td class="num">${row.contribution.toFixed(3)}</td>`;
+    ab.appendChild(tr);
+  });
+  document.getElementById('auditW').textContent    = R.W;
+  document.getElementById('auditSumC').textContent = R.sumC.toFixed(3);
+  document.getElementById('auditE').textContent    = R.E.toFixed(3);
+  document.getElementById('auditFormula').innerHTML = state.results.length
+    ? `Prioritized % = E / W × 100 = ${r2(R.E)} / ${R.W} × 100 = <b>${R.prioritizedPct.toFixed(2)}%</b>.
+       &nbsp; Overall % = Σc / N × 100 = ${R.sumC.toFixed(3)} / ${R.N} × 100 = <b>${R.overallPct.toFixed(2)}%</b>.`
+    : 'Add a result to begin scoring.';
+
+  // life-area rollup
+  const rb = document.getElementById('rollupBody');
+  rb.innerHTML = '';
+  roll.forEach(a => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${escapeHTML(a.area)}</td>
+      <td class="num">${a.meanCompletion===null?'<span class="miss">—</span>':(a.meanCompletion*100).toFixed(0)+'%'}</td>
+      <td class="num">${a.meanQuality===null?'<span class="miss">—</span>':a.meanQuality.toFixed(1)}</td>`;
+    rb.appendChild(tr);
+  });
+  if(!roll.length){ rb.innerHTML = '<tr><td colspan="3" class="miss">No data yet.</td></tr>'; }
+
+  lastMetrics = { R, WB, X, roll, prev };
+  drawChart();
+}
+
+/* =========================================================================
+   TREND CHART + HISTORY
+   ========================================================================= */
+let chart = null;
+function currentMeta(){
+  return {
+    period: document.getElementById('mPeriod').value || ('Period ' + (state.history.length+1)),
+    date:   document.getElementById('mDate').value || ''
+  };
+}
+function savePeriod(){
+  if(!state.results.length && !state.qualities.length){ alert('Nothing to save yet.'); return; }
+  const meta = currentMeta();
+  const R  = computeResults(state.results);
+  const WB = computeWellbeing(state.qualities);
+  state.history.push({
+    period: meta.period, date: meta.date,
+    prioritizedPct: R.prioritizedPct, overallPct: R.overallPct, wellBeingPct: WB.wellBeingPct
+  });
+  recompute();
+  updateHistCount();
+}
+function clearHistory(){ if(confirm('Clear all saved periods?')){ state.history = []; recompute(); updateHistCount(); } }
+function updateHistCount(){
+  document.getElementById('histCount').textContent = state.history.length
+    ? state.history.length + ' period' + (state.history.length===1?'':'s') + ' saved'
+    : 'No periods saved yet — save one to build the trend.';
+}
+
+function drawChart(){
+  const wrap = document.getElementById('chartWrap');
+  const note = document.getElementById('chartNote');
+  if(typeof Chart === 'undefined'){ note.textContent = 'Chart.js could not load (offline?) — trend chart unavailable, but all numbers above are computed locally.'; return; }
+  note.textContent = '';
+
+  // include saved history; also show current unsaved period as a dashed "now" point
+  const labels = state.history.map(h => h.period);
+  const prio = state.history.map(h => r2(h.prioritizedPct));
+  const over = state.history.map(h => r2(h.overallPct));
+  const well = state.history.map(h => r2(h.wellBeingPct));
+
+  const cur = { R: computeResults(state.results), WB: computeWellbeing(state.qualities) };
+  const showCurrent = state.results.length || state.qualities.length;
+  if(showCurrent){
+    labels.push((currentMeta().period || 'Now') + ' (current)');
+    prio.push(r2(cur.R.prioritizedPct));
+    over.push(r2(cur.R.overallPct));
+    well.push(r2(cur.WB.wellBeingPct));
+  }
+
+  const data = {
+    labels,
+    datasets: [
+      { label:'Prioritized %', data:prio, borderColor:'#1F3864', backgroundColor:'#1F3864', tension:.25, borderWidth:2.5, pointRadius:4 },
+      { label:'Overall %',     data:over, borderColor:'#6f8fc4', backgroundColor:'#6f8fc4', tension:.25, borderWidth:2, pointRadius:3, borderDash:[5,3] },
+      { label:'Well-Being %',  data:well, borderColor:'#2e7d46', backgroundColor:'#2e7d46', tension:.25, borderWidth:2, pointRadius:3 },
+    ]
+  };
+  const opts = {
+    responsive:true, maintainAspectRatio:false,
+    scales:{ y:{ min:0, max:100, ticks:{ callback:v=>v+'%' } } },
+    plugins:{ legend:{ position:'bottom', labels:{ font:{ family:'Calibri', size:12 } } } }
+  };
+  if(chart){ chart.data = data; chart.update(); }
+  else { chart = new Chart(document.getElementById('trendChart'), { type:'line', data, options:opts }); }
+}
+
+/* =========================================================================
+   EXPORT / IMPORT  (history persists in the file; API key never written)
+   ========================================================================= */
+function exportJSON(){
+  const meta = { client:document.getElementById('mClient').value, period:document.getElementById('mPeriod').value, date:document.getElementById('mDate').value };
+  const clean = arr => arr.map(({id, ...rest}) => rest);   // drop internal ids
+  const payload = {
+    schema:'results-wellbeing-scorer/v1',
+    meta,
+    notes: document.getElementById('notes').value,
+    results: clean(state.results),
+    qualities: clean(state.qualities),
+    history: state.history
+    // NOTE: apiKey deliberately excluded — held in memory only.
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const safe = (meta.client || 'scorecard').replace(/[^\w-]+/g,'_');
+  a.href = url; a.download = safe + '_' + (meta.period || 'period').replace(/[^\w-]+/g,'_') + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+function importJSON(evt){
+  const file = evt.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try{
+      const d = JSON.parse(e.target.result);
+      if(d.meta){
+        document.getElementById('mClient').value = d.meta.client || '';
+        document.getElementById('mPeriod').value = d.meta.period || '';
+        document.getElementById('mDate').value   = d.meta.date || '';
+      }
+      document.getElementById('notes').value = d.notes || '';
+      state.results   = (d.results||[]).map(r => ({ id:nid(), title:'', lifeArea:'', type:'Doing', status:'Not done', start:5, target:8, achieved:5, ...r }));
+      state.qualities = (d.qualities||[]).map(q => ({ id:nid(), name:'', lifeArea:'', score:5, previousScore:'', ...q }));
+      state.history   = Array.isArray(d.history) ? d.history : [];
+      renderResults(); renderQualities(); recompute(); updateHistCount();
+    }catch(err){ alert('Could not read that file: ' + err.message); }
+  };
+  reader.readAsText(file);
+  evt.target.value = '';
+}
+
+/* =========================================================================
+   PART 3 — GEMINI INSIGHT  (model never calculates; number-guard enforced)
+   ========================================================================= */
+const SYSTEM_INSTRUCTION =
+  "You interpret coaching scorecards. You are given already-computed metrics. " +
+  "Never compute, never restate arithmetic, never assert causation. Use 'alongside', " +
+  "'in the same period as', 'while' — never 'because', 'caused', 'led to'. " +
+  "If periodCount < 3, respond only that the baseline is still forming. " +
+  "Output JSON only: {observation, quadrant, confidence, coachQuestion}. " +
+  "observation: one sentence, descriptive. " +
+  "coachQuestion: an open question for the coach to ask the client. Not advice. " +
+  "The client must find their own answer.";
+
+function buildPayload(){
+  const R  = computeResults(state.results);
+  const WB = computeWellbeing(state.qualities);
+  const prev = state.history.length ? state.history[state.history.length-1] : null;
+  const X  = computeCross(R.prioritizedPct, WB.wellBeingPct, prev);
+  // Send BOTH full-precision and display-rounded numbers so the guard's allow-set covers what the model may echo.
+  return {
+    periodCount: state.history.length + (state.results.length||state.qualities.length ? 1 : 0),
+    results: {
+      count: R.N,
+      overallPct: r2(R.overallPct),
+      prioritizedPct: r2(R.prioritizedPct),
+      priorityGap: r2(R.priorityGap),
+      topThirdShare: r2(R.topThirdShare),
+      earnedWeight: r2(R.E),
+      totalWeight: R.W
+    },
+    wellBeing: {
+      count: WB.count,
+      wellBeingPct: r2(WB.wellBeingPct),
+      lowestQuality: WB.lowestQuality ? { name: WB.lowestQuality.name, score: Number(WB.lowestQuality.score) } : null
+    },
+    cross: {
+      executionFeelingGap: r2(X.executionFeelingGap),
+      quadrant: X.quadrant
+    },
+    lifeAreas: lifeAreaRollup(state.results, state.qualities).map(a => ({
+      area: a.area,
+      meanCompletionPct: a.meanCompletion===null ? null : Math.round(a.meanCompletion*100),
+      meanQuality: a.meanQuality===null ? null : r2(a.meanQuality)
+    })),
+    debriefNotes: document.getElementById('notes').value || ''
+  };
+}
+
+/* collect every numeric token that legitimately appears in the payload */
+function allowedNumbers(payload){
+  const set = new Set();
+  JSON.stringify(payload).replace(/-?\d+(\.\d+)?/g, m => { set.add(normNum(m)); return m; });
+  return set;
+}
+function normNum(s){ const n = Number(s); return Number.isInteger(n) ? String(n) : String(n); }
+
+/* returns array of offending numbers found in text but not in allow-set */
+function findRogueNumbers(text, allowSet){
+  const found = (text.match(/-?\d+(\.\d+)?/g) || []);
+  const rogue = [];
+  found.forEach(tok => { if(!allowSet.has(normNum(tok))) rogue.push(tok); });
+  return rogue;
+}
+
+async function generateInsight(){
+  const out = document.getElementById('insightOut');
+  const btn = document.getElementById('genBtn');
+  apiKeyMem = document.getElementById('apiKey').value.trim();
+  if(!apiKeyMem){ out.innerHTML = errBox('Enter a Gemini API key first. It stays in memory and is never exported.'); return; }
+
+  const payload = buildPayload();
+  const allow = allowedNumbers(payload);
+
+  btn.disabled = true; btn.textContent = 'Generating…';
+  out.innerHTML = '<p class="note">Contacting gemini-2.0-flash…</p>';
+
+  const body = {
+    systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
+    contents: [{ role:'user', parts:[{ text:
+      "Here are the already-computed metrics for this coaching period. Do not compute anything. " +
+      "Respond with JSON only.\n\n" + JSON.stringify(payload, null, 2) }] }],
+    generationConfig: { temperature: 0.4, responseMimeType: 'application/json' }
+  };
+
+  try{
+    const resp = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + encodeURIComponent(apiKeyMem),
+      { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body) }
+    );
+    if(!resp.ok){
+      const t = await resp.text();
+      out.innerHTML = errBox('API error ' + resp.status + '. ' + escapeHTML(t.slice(0,300)));
+      return;
+    }
+    const data = await resp.json();
+    const raw = (((data.candidates||[])[0]||{}).content||{}).parts||[];
+    const text = raw.map(p => p.text || '').join('').trim();
+    if(!text){ out.innerHTML = errBox('Empty response from the model.'); return; }
+
+    // parse JSON (strip any accidental code fences)
+    let parsed;
+    try{ parsed = JSON.parse(text.replace(/^```(json)?/i,'').replace(/```$/,'').trim()); }
+    catch(e){ out.innerHTML = errBox('Model did not return valid JSON. Response discarded.'); return; }
+
+    // ---- HARD RULE: guard against any number the model invented ----
+    const checkText = [parsed.observation, parsed.quadrant, parsed.confidence, parsed.coachQuestion]
+      .filter(x => typeof x === 'string').join('  ');
+    const rogue = findRogueNumbers(checkText, allow);
+    if(rogue.length){
+      out.innerHTML = errBox('Response discarded — it contained number(s) not present in the input payload: <b>' +
+        escapeHTML(rogue.join(', ')) + '</b>. The model must never introduce figures of its own.');
+      return;
+    }
+
+    renderDraft(parsed, payload.periodCount);
+  }catch(err){
+    out.innerHTML = errBox('Network / fetch error: ' + escapeHTML(err.message) + '. (If opened as a local file, your browser may block the request — that is expected.)');
+  }finally{
+    btn.disabled = false; btn.textContent = 'Generate Insight';
+  }
+}
+
+function renderDraft(p, periodCount){
+  const out = document.getElementById('insightOut');
+  const field = (label, val) => val ? `<div class="field"><div class="fl">${label}</div><div class="fv">${escapeHTML(String(val))}</div></div>` : '';
+  out.innerHTML = `
+    <div class="draftbox">
+      <div class="dhead"><span>Draft — for coach review</span><span>gemini-2.0-flash · ${periodCount} period${periodCount===1?'':'s'}</span></div>
+      <div class="dbody">
+        ${field('Observation', p.observation)}
+        ${field('Quadrant', p.quadrant)}
+        ${field('Confidence', p.confidence)}
+        ${field('Coach question', p.coachQuestion)}
+      </div>
+      <div class="warnnote">⚠ Not shown to the client. This is a draft interpretation for the coach only — the model received pre-computed numbers and performed no arithmetic.</div>
+    </div>`;
+}
+function errBox(msg){ return '<div class="err">' + msg + '</div>'; }
+
+/* =========================================================================
+   UTILITIES
+   ========================================================================= */
+function escapeHTML(s){ return String(s??'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escapeAttr(s){ return escapeHTML(s); }
+
+/* =========================================================================
+   BOOT
+   ========================================================================= */
+loadDemo();
+renderResults();
+renderQualities();
+recompute();
+updateHistCount();
+</script>
+</body>
+</html>
