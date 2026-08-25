@@ -114,7 +114,7 @@
   .err{color:#f28b82;font-size:13px;background:rgba(239,107,96,.12);border:1px solid rgba(239,107,96,.4);border-radius:6px;padding:8px 11px;margin-top:8px}
 
   .rollup td.num{text-align:center;font-variant-numeric:tabular-nums}
-  #chartWrap{border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:8px;background:var(--panel)}
+  #chartWrap,#barWrap{border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:8px;background:var(--panel)}
   .hist{font-size:12px;color:var(--muted);margin-top:6px}
 
   .foot-legal{margin-top:26px;padding-top:12px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);line-height:1.6}
@@ -264,6 +264,9 @@
     <button class="btn sm ghost" onclick="clearHistory()">Clear history</button>
     <span class="hist" id="histCount"></span>
   </div>
+  <h3>This period at a glance</h3>
+  <div id="barWrap"><canvas id="scoreBar" height="140"></canvas></div>
+  <h3>Across saved periods</h3>
   <div id="chartWrap"><canvas id="trendChart" height="150"></canvas></div>
   <p class="note" id="chartNote"></p>
 
@@ -672,10 +675,50 @@ function updateHistCount(){
     : 'No periods saved yet — save one to build the trend.';
 }
 
+/* Current-period bar chart — always meaningful, even with zero saved history.
+   Shows the two Result-Game scores and the Well-Being score side by side. */
+let barChart = null;
+function drawBars(){
+  if(typeof Chart === 'undefined') return;
+  const R  = computeResults(state.results);
+  const WB = computeWellbeing(state.qualities);
+  const data = {
+    labels: ['Prioritized %', 'Overall %', 'Well-Being %'],
+    datasets: [{
+      label: (currentMeta().period || 'This period'),
+      data: [
+        state.results.length ? r2(R.prioritizedPct) : 0,
+        state.results.length ? r2(R.overallPct) : 0,
+        WB.count ? r2(WB.wellBeingPct) : 0
+      ],
+      backgroundColor: ['#7ea9e6', '#a9c2e8', '#5fcf87'],
+      borderRadius: 5,
+      maxBarThickness: 90
+    }]
+  };
+  const tick = '#9db0ca', grid = 'rgba(255,255,255,.08)';
+  const opts = {
+    responsive:true, maintainAspectRatio:false,
+    scales:{
+      y:{ min:0, max:100, ticks:{ color:tick, callback:v=>v+'%' }, grid:{ color:grid } },
+      x:{ ticks:{ color:'#cdd9ea', font:{ family:'Calibri', size:12 } }, grid:{ display:false } }
+    },
+    plugins:{
+      legend:{ display:false },
+      tooltip:{ callbacks:{ label:c => c.parsed.y + '%' } }
+    }
+  };
+  if(barChart){ barChart.data = data; barChart.options = opts; barChart.update(); }
+  else { barChart = new Chart(document.getElementById('scoreBar'), { type:'bar', data, options:opts }); }
+}
+
 function drawChart(){
+  drawBars();
   const note = document.getElementById('chartNote');
-  if(typeof Chart === 'undefined'){ note.textContent = 'Chart.js could not load (offline?) — trend chart unavailable, but all numbers above are computed locally.'; return; }
-  note.textContent = '';
+  if(typeof Chart === 'undefined'){ note.textContent = 'Chart.js could not load (offline?) — charts unavailable, but all numbers above are computed locally.'; return; }
+  note.textContent = state.history.length
+    ? ''
+    : 'The line trend fills in once you save periods. The bars above always show this period’s three scores.';
 
   const labels = state.history.map(h => h.period);
   const prio = state.history.map(h => r2(h.prioritizedPct));
