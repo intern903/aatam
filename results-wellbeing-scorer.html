@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Results &amp; Well-Being Scorer</title>
-<!-- Chart.js is the only script dependency; loaded from CDN. App still works offline (trend chart just won't render). -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<!-- No external libraries — the combo trend chart is hand-drawn inline SVG. -->
+
 <style>
   :root{
     --bg:#0e1622;          /* app ground */
@@ -24,6 +24,8 @@
     --good:#5fcf87;
     --warn:#e8a34d;
     --bad:#ef6b60;
+    --chartgrid:rgba(255,255,255,.09); /* combo chart gridlines */
+    --chartaxis:#9db0ca;               /* combo chart axis text */
   }
   *{box-sizing:border-box}
   html,body{margin:0;background:var(--bg);color:var(--ink);
@@ -114,8 +116,57 @@
   .err{color:#f28b82;font-size:13px;background:rgba(239,107,96,.12);border:1px solid rgba(239,107,96,.4);border-radius:6px;padding:8px 11px;margin-top:8px}
 
   .rollup td.num{text-align:center;font-variant-numeric:tabular-nums}
-  #chartWrap,#barWrap{border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:8px;background:var(--panel)}
-  .hist{font-size:12px;color:var(--muted);margin-top:6px}
+  .hist{font-size:12px;color:var(--muted)}
+
+  /* combo chart */
+  .combo-head{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin:10px 0 4px}
+  .dropdown-row{display:flex;gap:8px}
+  .dropdown-wrap{position:relative}
+  .dropdown-btn{display:flex;align-items:center;gap:7px;padding:7px 13px;background:var(--inputbg);border:1px solid var(--line);
+    border-radius:999px;font-family:inherit;font-size:13px;color:var(--ink);cursor:pointer}
+  .dropdown-btn:hover{border-color:var(--accent)}
+  .dropdown-btn .count{color:var(--muted)}
+  .chevron{transition:transform .15s ease}
+  .chevron.open{transform:rotate(180deg)}
+  .dropdown-panel{position:absolute;right:0;top:calc(100% + 6px);width:250px;background:var(--panel);
+    border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.5);padding:6px 0;z-index:20}
+  .dropdown-panel.hidden{display:none}
+  .dropdown-actions{display:flex;justify-content:space-between;padding:0 10px 6px;margin-bottom:2px;border-bottom:1px solid var(--line)}
+  .dropdown-actions button{background:none;border:none;font-family:inherit;font-size:11.5px;color:var(--accent);cursor:pointer;padding:3px 2px}
+  .dropdown-actions button:hover{text-decoration:underline}
+  .check-row{display:flex;align-items:center;gap:9px;padding:6px 12px;cursor:pointer;user-select:none}
+  .check-row:hover{background:var(--band2)}
+  .check-row.featured .check-row-label{font-weight:700}
+  .check-divider{height:1px;background:var(--line);margin:4px 0}
+  .check-note{font-size:11.5px;color:var(--muted);padding:4px 12px 6px;line-height:1.4}
+  .check-box{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .check-box svg{display:none;width:10px;height:10px}
+  .check-row.checked .check-box svg{display:block}
+  .check-row-label{font-size:13.5px;color:var(--ink)}
+
+  .combo-wrap{position:relative;margin-top:10px;height:420px;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:8px 6px}
+  #comboSvg{width:100%;height:100%;display:block;overflow:visible}
+  .grid-line{stroke:var(--chartgrid);stroke-width:1}
+  .axis-l{fill:var(--chartaxis);font-size:12px}
+  .axis-r{fill:var(--chartaxis);font-size:11px}
+  .bar{transition:opacity .12s ease;cursor:pointer}
+  .bar:hover{opacity:.82}
+  .line-path{fill:none;stroke-width:2.5}
+  .dot{cursor:pointer;transition:r .12s ease}
+  .combo-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13.5px;text-align:center;padding:0 40px}
+  .combo-empty.hidden{display:none}
+  .combo-tip{position:absolute;pointer-events:none;transform:translate(-50%,-124%);background:var(--headbar);
+    border:1px solid var(--line);border-radius:9px;box-shadow:0 8px 20px rgba(0,0,0,.5);padding:7px 11px;white-space:nowrap;z-index:30}
+  .combo-tip.hidden{display:none}
+  .combo-tip-top{display:flex;align-items:center;gap:7px}
+  .combo-tip-lbl{font-size:13.5px;font-weight:700;color:#fff}
+  .combo-tip-sub{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .legend-wrap{margin-top:14px}
+  .legend-group{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px 18px;margin-bottom:4px}
+  .legend-group-title{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-right:2px}
+  .legend-item{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink)}
+  .legend-sq{width:12px;height:12px;border-radius:3px;flex-shrink:0}
+  .legend-line{width:16px;height:3px;border-radius:2px;flex-shrink:0}
 
   .foot-legal{margin-top:26px;padding-top:12px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);line-height:1.6}
 
@@ -129,7 +180,10 @@
     thead th{background:#1F3864 !important;color:#fff !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     tbody td{color:#111 !important;border-color:#e3e8f2 !important}
     tbody tr:nth-child(even){background:#EEF2FA !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .scorecard,.gapbox,#chartWrap,.draftbox .dbody{background:#fff !important;color:#111 !important;border-color:#C9D4EA !important}
+    .scorecard,.gapbox,.combo-wrap,.draftbox .dbody{background:#fff !important;color:#111 !important;border-color:#C9D4EA !important}
+    :root{--chartgrid:#e3e8f2;--chartaxis:#555}
+    .combo-tip{display:none !important}
+    .legend-item{color:#111 !important}
     .scorecard .big,.gapbox .gv,.audit tfoot td,.quad{color:#1F3864 !important}
     .audit tfoot td{background:#EEF2FA !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     input,select,textarea{color:#111 !important;background:#fff !important}
@@ -152,7 +206,7 @@
 
   <div class="metatop">
     <div><label>Client</label><input id="mClient" type="text" value="Priya Sharma"></div>
-    <div><label>Game Period</label><input id="mPeriod" type="text" value="Fortnight 1"></div>
+    <div><label>Game Period</label><input id="mPeriod" type="text" value="Fortnight 6"></div>
     <div><label>Date</label><input id="mDate" type="text" value="2026-08-24"></div>
   </div>
 
@@ -257,18 +311,47 @@
     <tbody id="rollupBody"></tbody>
   </table>
 
-  <!-- ================= TREND ================= -->
+  <!-- ================= TREND (combo) ================= -->
   <h2>4 · Trend</h2>
-  <div class="btnrow no-print">
-    <button class="btn sm" onclick="savePeriod()">★ Save this period to history</button>
-    <button class="btn sm ghost" onclick="clearHistory()">Clear history</button>
-    <span class="hist" id="histCount"></span>
+  <p class="note">Results Game scores as bars (right axis, 0–100) against Well-Being as lines (left axis, 1–10), across saved periods plus the current one (marked *). Filter each side with the dropdowns.</p>
+
+  <div class="combo-head no-print">
+    <div class="btnrow" style="margin:0">
+      <button class="btn sm" onclick="savePeriod()">★ Save this period to history</button>
+      <button class="btn sm ghost" onclick="clearHistory()">Clear history</button>
+      <span class="hist" id="histCount"></span>
+    </div>
+    <div class="dropdown-row">
+      <div class="dropdown-wrap" id="wbDD">
+        <button class="dropdown-btn" id="wbBtn" type="button">Well-Being <span class="count" id="wbBadge">(Avg)</span>
+          <svg class="chevron" id="wbChev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </button>
+        <div class="dropdown-panel hidden" id="wbPanel">
+          <div class="dropdown-actions"><button type="button" id="wbSelectAll">Well-Being Score</button><button type="button" id="wbClear">Clear</button></div>
+          <div id="wbList"></div>
+        </div>
+      </div>
+      <div class="dropdown-wrap" id="resDD">
+        <button class="dropdown-btn" id="resBtn" type="button">Results Game <span class="count" id="resBadge">(Both)</span>
+          <svg class="chevron" id="resChev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </button>
+        <div class="dropdown-panel hidden" id="resPanel">
+          <div class="dropdown-actions"><button type="button" id="resSelectAll">Select all</button><button type="button" id="resClear">Clear</button></div>
+          <div id="resList"></div>
+        </div>
+      </div>
+    </div>
   </div>
-  <h3>This period at a glance</h3>
-  <div id="barWrap"><canvas id="scoreBar" height="140"></canvas></div>
-  <h3>Across saved periods</h3>
-  <div id="chartWrap"><canvas id="trendChart" height="150"></canvas></div>
-  <p class="note" id="chartNote"></p>
+
+  <div class="combo-wrap" id="comboWrap">
+    <svg id="comboSvg" viewBox="0 0 900 440" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="combo-tip hidden" id="comboTip">
+      <div class="combo-tip-top"><span id="comboTipSw"></span><span class="combo-tip-lbl" id="comboTipLbl"></span></div>
+      <div class="combo-tip-sub" id="comboTipSub"></div>
+    </div>
+    <div class="combo-empty hidden" id="comboEmpty">Select at least one series from either dropdown to see the chart.</div>
+  </div>
+  <div class="legend-wrap" id="comboLegend"></div>
 
   <!-- ================= DATA / PERSISTENCE ================= -->
   <h2 class="no-print">Data</h2>
@@ -295,7 +378,7 @@
   </div>
 
   <p class="foot-legal">
-    All numbers on this page are computed locally in full precision and rounded for display only. The Insight panel is a draft interpretation for the coach and is <b>not</b> shown to the client; the language model receives only pre-computed metrics and never performs arithmetic. Built to run as a single file — Chart.js loads from a CDN for the trend chart; everything else works offline.
+    All numbers on this page are computed locally in full precision and rounded for display only. The Insight panel is a draft interpretation for the coach and is <b>not</b> shown to the client; the language model receives only pre-computed metrics and never performs arithmetic. Built to run as a single file with no external libraries — the trend chart is hand-drawn inline SVG, so everything works offline.
   </p>
 </div>
 
@@ -435,11 +518,23 @@ function loadDemo(){
     { id:nid(), title:'Fully present with children after 6pm',          lifeArea:'Family', type:'Being', status:'Not done', start:5, target:8, achieved:7 },
   ];
   state.qualities = [
-    { id:nid(), name:'Confident',  lifeArea:'Career',               score:7, previousScore:'' },
-    { id:nid(), name:'Courageous', lifeArea:'Personal Development', score:6, previousScore:'' },
-    { id:nid(), name:'Resilient',  lifeArea:'Family',               score:5, previousScore:'' },
+    { id:nid(), name:'Confident',  lifeArea:'Career',               score:7, previousScore:6 },
+    { id:nid(), name:'Courageous', lifeArea:'Personal Development', score:6, previousScore:5 },
+    { id:nid(), name:'Resilient',  lifeArea:'Family',               score:5, previousScore:5 },
   ];
-  state.history = [];
+  // A few saved fortnights so the trend/combo chart is populated on first open.
+  const H = (period, conf, cour, res, overall, priority) => ({
+    period, date:'', overallPct:overall, prioritizedPct:priority,
+    wellBeingPct:(conf+cour+res)/3/10*100,
+    qualities:[{name:'Confident',score:conf},{name:'Courageous',score:cour},{name:'Resilient',score:res}]
+  });
+  state.history = [
+    H('Fortnight 1', 4, 3, 5, 58, 52),
+    H('Fortnight 2', 5, 4, 5, 63, 57),
+    H('Fortnight 3', 5, 5, 6, 61, 59),
+    H('Fortnight 4', 6, 5, 6, 67, 62),
+    H('Fortnight 5', 7, 6, 5, 70, 66),
+  ];
 }
 
 /* =========================================================================
@@ -649,12 +744,17 @@ function recompute(){
 /* =========================================================================
    TREND CHART + HISTORY
    ========================================================================= */
-let chart = null;
 function currentMeta(){
   return {
     period: document.getElementById('mPeriod').value || ('Period ' + (state.history.length+1)),
     date:   document.getElementById('mDate').value || ''
   };
+}
+function snapshotQualities(){
+  // per-quality snapshot for this period, so the combo chart can draw per-quality lines
+  return state.qualities
+    .filter(q => q.score !== '' && q.score != null && !isNaN(Number(q.score)))
+    .map(q => ({ name: q.name || '(unnamed)', score: Number(q.score) }));
 }
 function savePeriod(){
   if(!state.results.length && !state.qualities.length){ alert('Nothing to save yet.'); return; }
@@ -663,7 +763,8 @@ function savePeriod(){
   const WB = computeWellbeing(state.qualities);
   state.history.push({
     period: meta.period, date: meta.date,
-    prioritizedPct: R.prioritizedPct, overallPct: R.overallPct, wellBeingPct: WB.wellBeingPct
+    prioritizedPct: R.prioritizedPct, overallPct: R.overallPct, wellBeingPct: WB.wellBeingPct,
+    qualities: snapshotQualities()
   });
   recompute();
   updateHistCount();
@@ -675,85 +776,256 @@ function updateHistCount(){
     : 'No periods saved yet — save one to build the trend.';
 }
 
-/* Current-period bar chart — always meaningful, even with zero saved history.
-   Shows the two Result-Game scores and the Well-Being score side by side. */
-let barChart = null;
-function drawBars(){
-  if(typeof Chart === 'undefined') return;
-  const R  = computeResults(state.results);
-  const WB = computeWellbeing(state.qualities);
-  const data = {
-    labels: ['Prioritized %', 'Overall %', 'Well-Being %'],
-    datasets: [{
-      label: (currentMeta().period || 'This period'),
-      data: [
-        state.results.length ? r2(R.prioritizedPct) : 0,
-        state.results.length ? r2(R.overallPct) : 0,
-        WB.count ? r2(WB.wellBeingPct) : 0
-      ],
-      backgroundColor: ['#7ea9e6', '#a9c2e8', '#5fcf87'],
-      borderRadius: 5,
-      maxBarThickness: 90
-    }]
-  };
-  const tick = '#9db0ca', grid = 'rgba(255,255,255,.08)';
-  const opts = {
-    responsive:true, maintainAspectRatio:false,
-    scales:{
-      y:{ min:0, max:100, ticks:{ color:tick, callback:v=>v+'%' }, grid:{ color:grid } },
-      x:{ ticks:{ color:'#cdd9ea', font:{ family:'Calibri', size:12 } }, grid:{ display:false } }
-    },
-    plugins:{
-      legend:{ display:false },
-      tooltip:{ callbacks:{ label:c => c.parsed.y + '%' } }
-    }
-  };
-  if(barChart){ barChart.data = data; barChart.options = opts; barChart.update(); }
-  else { barChart = new Chart(document.getElementById('scoreBar'), { type:'bar', data, options:opts }); }
-}
+/* =========================================================================
+   COMBO CHART — Results Game scores as bars (0–100, right axis)
+                 Well-Being as lines (1–10, left axis), across periods.
+   Hand-drawn inline SVG (no chart library), so it renders identically
+   everywhere including the hosted Artifact sandbox.
+   ========================================================================= */
+const RESULTS_SERIES = [
+  { key:'overall',  label:'Overall Score',  color:'#8fb0cc' },
+  { key:'priority', label:'Priority Score', color:'#e0a15c' },
+];
+const AVG_COLOR = '#cdd9ea';
+const QUAL_PALETTE = ['#8C7AE0','#E8B23D','#4FA88A','#5B9BD5','#E37B5B','#C6589E','#8BAE46','#d98b8b','#7fce9e','#c9a24b'];
 
-function drawChart(){
-  drawBars();
-  const note = document.getElementById('chartNote');
-  if(typeof Chart === 'undefined'){ note.textContent = 'Chart.js could not load (offline?) — charts unavailable, but all numbers above are computed locally.'; return; }
-  note.textContent = state.history.length
-    ? ''
-    : 'The line trend fills in once you save periods. The bars above always show this period’s three scores.';
+const combo = { avgChecked:true, wbSel:new Set(), resSel:new Set(['overall','priority']), inited:false };
 
-  const labels = state.history.map(h => h.period);
-  const prio = state.history.map(h => r2(h.prioritizedPct));
-  const over = state.history.map(h => r2(h.overallPct));
-  const well = state.history.map(h => r2(h.wellBeingPct));
-
-  const cur = { R: computeResults(state.results), WB: computeWellbeing(state.qualities) };
-  const showCurrent = state.results.length || state.qualities.length;
-  if(showCurrent){
-    labels.push((currentMeta().period || 'Now') + ' (current)');
-    prio.push(r2(cur.R.prioritizedPct));
-    over.push(r2(cur.R.overallPct));
-    well.push(r2(cur.WB.wellBeingPct));
+/* Build the ordered list of period points from saved history + the current (unsaved) period. */
+function comboData(){
+  const pts = state.history.map(h => {
+    const qmap = {};
+    (h.qualities || []).forEach(q => { qmap[q.name] = Number(q.score); });
+    const wbAvg = (h.qualities && h.qualities.length)
+      ? h.qualities.reduce((s,q)=>s+Number(q.score),0) / h.qualities.length
+      : (typeof h.wellBeingPct === 'number' ? h.wellBeingPct/10 : null);
+    return { label:h.period || '—', overall:r2(h.overallPct), priority:r2(h.prioritizedPct), qualities:qmap, wbAvg };
+  });
+  if(state.results.length || state.qualities.length){
+    const R = computeResults(state.results), WB = computeWellbeing(state.qualities);
+    const qmap = {};
+    snapshotQualities().forEach(q => { qmap[q.name] = q.score; });
+    pts.push({
+      label: (currentMeta().period || 'Now') + ' (current)',
+      overall:  state.results.length ? r2(R.overallPct) : null,
+      priority: state.results.length ? r2(R.prioritizedPct) : null,
+      qualities: qmap,
+      wbAvg: WB.count ? WB.wellBeingPct/10 : null,
+      current:true
+    });
   }
-
-  const data = {
-    labels,
-    datasets: [
-      { label:'Prioritized %', data:prio, borderColor:'#7ea9e6', backgroundColor:'#7ea9e6', tension:.25, borderWidth:2.5, pointRadius:4 },
-      { label:'Overall %',     data:over, borderColor:'#a9c2e8', backgroundColor:'#a9c2e8', tension:.25, borderWidth:2, pointRadius:3, borderDash:[5,3] },
-      { label:'Well-Being %',  data:well, borderColor:'#5fcf87', backgroundColor:'#5fcf87', tension:.25, borderWidth:2, pointRadius:3 },
-    ]
-  };
-  const tick = '#9db0ca', grid = 'rgba(255,255,255,.08)';
-  const opts = {
-    responsive:true, maintainAspectRatio:false,
-    scales:{
-      y:{ min:0, max:100, ticks:{ color:tick, callback:v=>v+'%' }, grid:{ color:grid } },
-      x:{ ticks:{ color:tick }, grid:{ color:grid } }
-    },
-    plugins:{ legend:{ position:'bottom', labels:{ color:'#cdd9ea', font:{ family:'Calibri', size:12 } } } }
-  };
-  if(chart){ chart.data = data; chart.options = opts; chart.update(); }
-  else { chart = new Chart(document.getElementById('trendChart'), { type:'line', data, options:opts }); }
+  return pts;
 }
+/* union of quality names across all points, in first-seen order */
+function comboQualityNames(pts){
+  const seen = [], set = new Set();
+  pts.forEach(p => Object.keys(p.qualities).forEach(n => { if(!set.has(n)){ set.add(n); seen.push(n); } }));
+  return seen;
+}
+function qualColor(name, names){ return QUAL_PALETTE[names.indexOf(name) % QUAL_PALETTE.length]; }
+
+function comboLineSeries(pts){
+  if(combo.avgChecked) return [{ key:'__avg', label:'Well Being Score', color:AVG_COLOR, getValue:p=>p.wbAvg }];
+  const names = comboQualityNames(pts);
+  return names.filter(n => combo.wbSel.has(n))
+    .map(n => ({ key:'q:'+n, label:n, color:qualColor(n,names), getValue:p => (n in p.qualities ? p.qualities[n] : null) }));
+}
+function comboBarSeries(){ return RESULTS_SERIES.filter(s => combo.resSel.has(s.key)); }
+
+/* geometry */
+const CB = { top:20, right:52, bottom:40, left:38, W:900, H:440 };
+CB.cw = CB.W - CB.left - CB.right;
+CB.ch = CB.H - CB.top - CB.bottom;
+const svgns = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs){ const e=document.createElementNS(svgns,tag); for(const k in attrs) e.setAttribute(k,attrs[k]); return e; }
+function cbX(i,n){ return n<=1 ? CB.left + CB.cw/2 : CB.left + i*CB.cw/(n-1); }
+function cbYline(v){ return CB.top + ((10 - v)/(10 - 1)) * CB.ch; }          // 1..10 left axis
+function cbYbar(v){ return (CB.H - CB.bottom) - (v/100) * CB.ch; }           // 0..100 right axis
+
+function renderCombo(){
+  const svg = document.getElementById('comboSvg');
+  const empty = document.getElementById('comboEmpty');
+  if(!svg) return;
+  svg.innerHTML = '';
+  const pts = comboData();
+  const lineSeries = comboLineSeries(pts);
+  const barSeries = comboBarSeries();
+  const n = pts.length;
+
+  if(n === 0 || (lineSeries.length === 0 && barSeries.length === 0)){
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+
+  // left axis (1–10)
+  for(let v=1; v<=10; v++){
+    const y = cbYline(v);
+    svg.appendChild(svgEl('line',{x1:CB.left,x2:CB.W-CB.right,y1:y,y2:y,class:'grid-line'}));
+    const t = svgEl('text',{x:CB.left-9,y:y+4,class:'axis-l','text-anchor':'end'}); t.textContent=v; svg.appendChild(t);
+  }
+  // right axis labels (0–100)
+  [0,20,40,60,80,100].forEach(v=>{
+    const y = cbYbar(v);
+    const t = svgEl('text',{x:CB.W-CB.right+11,y:y+4,class:'axis-r','text-anchor':'start'}); t.textContent=v; svg.appendChild(t);
+  });
+  // x labels
+  pts.forEach((p,i)=>{
+    const t = svgEl('text',{x:cbX(i,n),y:CB.H-CB.bottom+22,class:'axis-l','text-anchor':'middle'});
+    t.textContent = p.label.replace(' (current)','*'); svg.appendChild(t);
+  });
+
+  // bars
+  const gap = n<=1 ? CB.cw*0.5 : CB.cw/(n-1);
+  const groupW = Math.min(gap*0.55, 90);
+  const nb = barSeries.length;
+  pts.forEach((p,i)=>{
+    const cx = cbX(i,n);
+    barSeries.forEach((s,si)=>{
+      const value = p[s.key];
+      if(value==null || isNaN(value)) return;
+      let bw, bx;
+      if(nb===1){ bw=groupW; bx=cx-bw/2; }
+      else { bw=(groupW-4)/2; bx = si===0 ? cx-bw-2 : cx+2; }
+      const top = cbYbar(value), base = cbYbar(0);
+      const rect = svgEl('rect',{x:bx,y:top,width:Math.max(bw,2),height:Math.max(base-top,0),rx:4,fill:s.color,class:'bar'});
+      rect.addEventListener('mouseenter',()=>comboTip(rect, s.color, 'sq', s.label, p.label.replace(' (current)',' · current'), value+' / 100'));
+      rect.addEventListener('mouseleave',comboHideTip);
+      svg.appendChild(rect);
+    });
+  });
+
+  // lines
+  lineSeries.forEach(s=>{
+    let d='';
+    pts.forEach((p,i)=>{ const v=s.getValue(p); if(v==null||isNaN(v)) return; d += (d?' L ':'M ') + cbX(i,n) + ',' + cbYline(v); });
+    if(d) svg.appendChild(svgEl('path',{d, class:'line-path', stroke:s.color}));
+    pts.forEach((p,i)=>{
+      const v=s.getValue(p); if(v==null||isNaN(v)) return;
+      const cx=cbX(i,n), cy=cbYline(v);
+      const c = svgEl('circle',{cx,cy,r:5,fill:s.color,stroke:'var(--panel)','stroke-width':2,class:'dot'});
+      const disp = s.key==='__avg' ? v.toFixed(1) : v;
+      c.addEventListener('mouseenter',()=>{ c.setAttribute('r',7); comboTip(c, s.color, 'dot', s.label, p.label.replace(' (current)',' · current'), disp+' / 10'); });
+      c.addEventListener('mouseleave',()=>{ c.setAttribute('r',5); comboHideTip(); });
+      svg.appendChild(c);
+    });
+  });
+}
+
+/* tooltip */
+function comboTip(node, color, shape, label, sub1, sub2){
+  const svg = document.getElementById('comboSvg');
+  const wrap = document.getElementById('comboWrap');
+  const tip = document.getElementById('comboTip');
+  const bb = node.getBBox();
+  const pt = svg.createSVGPoint(); pt.x = bb.x + bb.width/2; pt.y = bb.y;
+  const sp = pt.matrixTransform(svg.getScreenCTM());
+  const r = wrap.getBoundingClientRect();
+  tip.style.left = (sp.x - r.left) + 'px';
+  tip.style.top  = (sp.y - r.top)  + 'px';
+  document.getElementById('comboTipSw').style.cssText =
+    `background:${color};width:9px;height:9px;border-radius:${shape==='dot'?'50%':'2px'};display:inline-block`;
+  document.getElementById('comboTipLbl').textContent = label;
+  document.getElementById('comboTipSub').textContent = sub1 + ' · ' + sub2;
+  tip.classList.remove('hidden');
+}
+function comboHideTip(){ document.getElementById('comboTip').classList.add('hidden'); }
+
+/* dropdown lists */
+function checkSvg(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>'; }
+function makeCheckRow(label, color, checked, onClick, featured){
+  const row = document.createElement('div');
+  row.className = 'check-row' + (featured?' featured':'') + (checked?' checked':'');
+  const box = document.createElement('span'); box.className='check-box';
+  box.style.borderColor = checked ? color : 'var(--line)';
+  box.style.background   = checked ? color : 'transparent';
+  box.innerHTML = checkSvg();
+  const lab = document.createElement('span'); lab.className='check-row-label'; lab.textContent = label;
+  row.appendChild(box); row.appendChild(lab);
+  row.addEventListener('click', onClick);
+  return row;
+}
+function buildWBList(){
+  const list = document.getElementById('wbList'); list.innerHTML='';
+  const names = comboQualityNames(comboData());
+  list.appendChild(makeCheckRow('All qualities (Well-Being Score)', AVG_COLOR, combo.avgChecked, ()=>{ combo.avgChecked=true; combo.wbSel.clear(); comboRefresh(); }, true));
+  const div = document.createElement('div'); div.className='check-divider'; list.appendChild(div);
+  if(!names.length){
+    const note = document.createElement('div'); note.className='check-note'; note.textContent='Save periods with named qualities to chart them individually.'; list.appendChild(note);
+  }
+  names.forEach(nm=>{
+    const checked = combo.wbSel.has(nm);
+    list.appendChild(makeCheckRow(nm, qualColor(nm,names), checked, ()=>{
+      combo.avgChecked=false;
+      if(combo.wbSel.has(nm)) combo.wbSel.delete(nm); else combo.wbSel.add(nm);
+      if(!combo.wbSel.size) combo.avgChecked=true;
+      comboRefresh();
+    }, false));
+  });
+}
+function buildResList(){
+  const list = document.getElementById('resList'); list.innerHTML='';
+  RESULTS_SERIES.forEach(s=>{
+    const checked = combo.resSel.has(s.key);
+    list.appendChild(makeCheckRow(s.label, s.color, checked, ()=>{
+      if(combo.resSel.has(s.key)) combo.resSel.delete(s.key); else combo.resSel.add(s.key);
+      comboRefresh();
+    }, false));
+  });
+}
+function buildComboLegend(){
+  const lw = document.getElementById('comboLegend'); lw.innerHTML='';
+  const pts = comboData();
+  const add = (title, items, lineStyle) => {
+    if(!items.length) return;
+    const g = document.createElement('div'); g.className='legend-group';
+    const t = document.createElement('span'); t.className='legend-group-title'; t.textContent=title; g.appendChild(t);
+    items.forEach(s=>{
+      const it = document.createElement('span'); it.className='legend-item';
+      it.innerHTML = `<span class="${lineStyle?'legend-line':'legend-sq'}" style="background:${s.color}"></span><span>${escapeHTML(s.label)}</span>`;
+      g.appendChild(it);
+    });
+    lw.appendChild(g);
+  };
+  add('Well-Being', comboLineSeries(pts), true);
+  add('Results Game', comboBarSeries(), false);
+}
+function updateComboBadges(){
+  const wb = document.getElementById('wbBadge'), res = document.getElementById('resBadge');
+  if(combo.avgChecked) wb.textContent='(Avg)';
+  else if(combo.wbSel.size) wb.textContent='('+combo.wbSel.size+' selected)';
+  else wb.textContent='(None)';
+  if(combo.resSel.size===0) res.textContent='(None)';
+  else if(combo.resSel.size===RESULTS_SERIES.length) res.textContent='(Both)';
+  else res.textContent='('+RESULTS_SERIES.find(s=>combo.resSel.has(s.key)).label.replace(' Score','')+')';
+}
+function comboRefresh(){ renderCombo(); buildWBList(); buildResList(); buildComboLegend(); updateComboBadges(); }
+
+function comboInit(){
+  if(combo.inited) return; combo.inited = true;
+  const wire = (btn, panel, chev, otherPanel, otherChev) => {
+    document.getElementById(btn).addEventListener('click', e=>{
+      e.stopPropagation();
+      document.getElementById(panel).classList.toggle('hidden');
+      document.getElementById(chev).classList.toggle('open');
+      document.getElementById(otherPanel).classList.add('hidden');
+      document.getElementById(otherChev).classList.remove('open');
+    });
+  };
+  wire('wbBtn','wbPanel','wbChev','resPanel','resChev');
+  wire('resBtn','resPanel','resChev','wbPanel','wbChev');
+  document.addEventListener('mousedown', e=>{
+    if(!document.getElementById('wbDD').contains(e.target)){ document.getElementById('wbPanel').classList.add('hidden'); document.getElementById('wbChev').classList.remove('open'); }
+    if(!document.getElementById('resDD').contains(e.target)){ document.getElementById('resPanel').classList.add('hidden'); document.getElementById('resChev').classList.remove('open'); }
+  });
+  document.getElementById('wbSelectAll').addEventListener('click', ()=>{ combo.avgChecked=true; combo.wbSel.clear(); comboRefresh(); });
+  document.getElementById('wbClear').addEventListener('click', ()=>{ combo.avgChecked=false; combo.wbSel.clear(); comboRefresh(); });
+  document.getElementById('resSelectAll').addEventListener('click', ()=>{ RESULTS_SERIES.forEach(s=>combo.resSel.add(s.key)); comboRefresh(); });
+  document.getElementById('resClear').addEventListener('click', ()=>{ combo.resSel.clear(); comboRefresh(); });
+  comboRefresh();
+}
+/* alias kept so recompute() keeps working */
+function drawChart(){ if(combo.inited) comboRefresh(); }
 
 /* =========================================================================
    EXPORT / IMPORT  (history persists in the file; API key never written)
@@ -953,6 +1225,7 @@ renderResults();
 renderQualities();
 recompute();
 updateHistCount();
+comboInit();
 </script>
 </body>
 </html>
