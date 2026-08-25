@@ -761,6 +761,7 @@ function importJSON(evt){
 /* =========================================================================
    PART 3 — GEMINI INSIGHT  (model never calculates; number-guard enforced)
    ========================================================================= */
+const GEMINI_MODEL = 'gemini-3.6-flash';  // gemini-2.0-flash was retired; change here if Google rotates the model
 const SYSTEM_INSTRUCTION =
   "You interpret coaching scorecards. You are given already-computed metrics. " +
   "Never compute, never restate arithmetic, never assert causation. Use 'alongside', " +
@@ -831,7 +832,7 @@ async function generateInsight(){
   const allow = allowedNumbers(payload);
 
   btn.disabled = true; btn.textContent = 'Generating…';
-  out.innerHTML = '<p class="note">Contacting gemini-2.0-flash…</p>';
+  out.innerHTML = '<p class="note">Contacting ' + GEMINI_MODEL + '…</p>';
 
   const body = {
     systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
@@ -843,7 +844,7 @@ async function generateInsight(){
 
   try{
     const resp = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + encodeURIComponent(apiKeyMem),
+      'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent?key=' + encodeURIComponent(apiKeyMem),
       { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body) }
     );
     if(!resp.ok){
@@ -883,7 +884,7 @@ function renderDraft(p, periodCount){
   const field = (label, val) => val ? `<div class="field"><div class="fl">${label}</div><div class="fv">${escapeHTML(String(val))}</div></div>` : '';
   out.innerHTML = `
     <div class="draftbox">
-      <div class="dhead"><span>Draft — for coach review</span><span>gemini-2.0-flash · ${periodCount} period${periodCount===1?'':'s'}</span></div>
+      <div class="dhead"><span>Draft — for coach review</span><span>${GEMINI_MODEL} · ${periodCount} period${periodCount===1?'':'s'}</span></div>
       <div class="dbody">
         ${field('Observation', p.observation)}
         ${field('Quadrant', p.quadrant)}
